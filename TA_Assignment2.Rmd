@@ -1,0 +1,280 @@
+---
+title: "TA_Assignment2"
+output: html_document
+## Sanjeev Sharma (ID-11910079), Kavish Gakhar (ID - 11910045), Rishabh Jethwani (ID - 11910097) 
+---
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r setup}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+## setup
+rm(list=ls())    # clear workspace
+
+
+# Install and Activate all required libraries 
+#install.packages("udpipe")
+if (!require(udpipe)){install.packages("udpipe")}
+if (!require(textrank)){install.packages("textrank")}
+if (!require(lattice)){install.packages("lattice")}
+if (!require(igraph)){install.packages("igraph")}
+if (!require(ggraph)){install.packages("ggraph")}
+if (!require(wordcloud)){install.packages("wordcloud")}
+
+library(udpipe)
+library(textrank)
+library(lattice)
+library(igraph)
+library(ggraph)
+library(ggplot2)
+library(wordcloud)
+library(stringr)
+
+# setup working dir
+setwd('C:\\ISB\\Term1\\Res2\\TA\\Group_Assignments\\Assignment1');  
+getwd()
+
+
+
+```
+
+## Read text using readline
+
+```{r}
+# Get text data
+
+raw_text = readLines("Election.txt")
+head(raw_text,10)
+
+```
+
+```{r}
+# Clean the text
+
+updated_text <- function(text, punct=FALSE, alphanum=FALSE, blank=FALSE, cntrl=FALSE ){
+
+
+cleaned_text  =  gsub("<.*?>", "", text)   # drop html junk (if any)
+
+#cleaned_text  =  gsub("[[:digit:]]", "", cleaned_text) # drop digits:0,1,2... (if any)
+if (punct =="TRUE") {cleaned_text  =  gsub("[[:punct:]]", "", cleaned_text)} # drop punctuation (if any)
+if (alphanum =="TRUE") {cleaned_text  =  gsub("[^[:alnum:]]", " ",cleaned_text)} # drop alphanumeric (if any)
+if (blank =="TRUE") {cleaned_text  =  gsub("[[:blank:]]", " ",cleaned_text)} # drop blank (if any)
+if (blank =="TRUE") {cleaned_text  =  gsub("[[:cntrl:]]", " ",cleaned_text)} # drop control characters (if any)
+
+#cleaned_text  =  gsub("[ \t]{2,}", " ", cleaned_text) # Clean extra whitespaces using regex
+#cleaned_text  =  gsub("^\\s+|\\s+$", "", cleaned_text) # Clean extra whitespaces using regex
+cleaned_text  =  gsub("\\[.*?\\]","",cleaned_text) # Clean text between [ ] 
+
+empty_lines = grepl('^\\s*$',cleaned_text ) # Clean by removing extra lines
+cleaned_text = cleaned_text[! empty_lines] # All text except extra lines
+
+return (cleaned_text) } #cleaned_text() ends
+#head(cleaned_text)
+
+```
+
+# Call updated_text function to clean the raw text
+
+```{r}
+# Call updated_text function to clean the raw text
+
+new_text = updated_text(raw_text,punct = TRUE,alphanum = TRUE,blank = TRUE, cntrl = TRUE)
+head(new_text)
+
+```
+# write function to get annotated text
+
+```{r}
+
+# English language model included by default
+# 2a - Annotated documents (use udpipe_annotate function from udpipe) as data frame. 
+# 2b - Drop sentence column from the data frame
+
+annotated_text <- function(clean_text, model = "english"){
+#test = file.exists("english-ud-2.0-170801.udpipe")
+#test
+# Download language models in English, Spanish and Hindi (say). Uncomment or copy from LMS.
+
+if (model == "english") {
+  fexist = file.exists("english-ud-2.0-170801.udpipe")
+  
+  if (fexist == FALSE) { ud_model_english <- udpipe_download_model(language = "english")}
+}
+#if (model =="spanish") {ud_model_spanish <- udpipe_download_model(language = "spanish")}
+#if (model =="hindi") {ud_model_hindi <- udpipe_download_model(language = "hindi")} 
+  
+ud_model_english = udpipe_load_model("./english-ud-2.0-170801.udpipe")  # file_model only needed
+
+text_annotate <- udpipe_annotate(ud_model_english, x = clean_text) %>% as.data.frame()
+#str(text_annotate)
+#head(text_annotate,10)
+
+#drops <- c(drop_col)
+text_annotate$sentence <-NULL
+
+return (text_annotate) } # annotatd text as output
+
+```
+
+
+# Call annotate function with drop sentence field
+
+```{r}
+# Call annotate function with drop sentence field
+
+final_annotate_text = annotated_text(new_text,model = "english")
+#str(final_annotate_text)
+head(final_annotate_text,10)
+```
+
+```{r}
+# Create Function to display two wordclouds, one for all the nouns in the corpus 
+# and another for all the verbs in the corpus
+
+annotated_text_wc <- function(text, noun = TRUE, verb = TRUE){
+
+xpos = table(text$xpos)  # Language-specific part-of-speech tag; underscore if not available
+upos = table(text$upos)  # Universal part-of-speech tag
+#table_xpos
+#table_upos
+
+# Here are the most common Nouns
+if (noun == TRUE){
+all_nouns = text %>% subset(., upos %in% "NOUN") 
+top_nouns = txt_freq(all_nouns$lemma)  # txt_freq() calcs noun freqs in desc order for Lemma or stem of word (noun) form
+#head(top_nouns, 10)	
+}
+
+# Here are the most common verbs
+if (verb == TRUE){
+all_verbs = text %>% subset(., upos %in% "VERB") 
+top_verbs = txt_freq(all_verbs$lemma) # txt_freq() calcs noun freqs in desc order for Lemma or stem of word (verb) form
+#head(top_verbs, 10)
+}
+
+noun = data.frame(Word = top_nouns$key,Freq = top_nouns$freq, Name = "Noun")
+verb = data.frame(Word = top_verbs$key,Freq = top_verbs$freq, Name = "Verb")
+noun_verb = rbind(noun,verb)
+#noun
+#verb
+#noun_verb
+# WordCloud for most common Nouns
+
+colourlist = c("red","blue","green","purple", "yellow","black")
+wordcloud(words = top_nouns$key, 
+          freq = top_nouns$freq, 
+          min.freq = 2, 
+          max.words = 100,
+          random.order = FALSE, 
+          #colors = rev(brewer.pal(8,"Blues")))
+          colors = colourlist)
+
+# WordCloud for most common Verbs
+
+wordcloud(words = top_verbs$key, 
+          freq = top_verbs$freq, 
+          min.freq = 2, 
+          max.words = 100,
+          random.order = FALSE, 
+          colors = rev(brewer.pal(8,"Dark2")))
+
+return(noun_verb)}
+
+```
+
+# Call Function to display two wordclouds, one for all the nouns in the corpus 
+# and another for all the verbs in the corpus
+
+```{r}
+# Call Function to display two wordclouds, one for all the nouns in the corpus 
+# and another for all the verbs in the corpus
+
+worldoutput = annotated_text_wc (final_annotate_text,noun = TRUE, verb = TRUE)
+head(worldoutput)
+```
+# Description
+
+# Collocations are a sequence of words or terms that co-occur more often than would be expected by chance. Common collocation are # 1. adjectives + nouns, 
+# 2. nouns followed by nouns, 
+# 3. verbs and nouns,
+# 4. adverbs and adjectives, 
+# 5. verbs and prepositional phrases or 
+# 6. verbs and adverbs.
+
+#This function extracts relevant collocations and computes the following statistics on them which are indicators of how likely two terms are collocated compared to being independent.
+# PMI (pointwise mutual information): log2(P(w1w2) / P(w1) P(w2))
+# MD (mutual dependency): log2(P(w1w2)^2 / P(w1) P(w2))
+# LFMD (log-frequency biased mutual dependency): MD + log2(P(w1w2))
+
+#As natural language is non random - otherwise you wouldn't understand what I'm saying, most of the combinations of terms are significant. That's why these indicators of collocation are merely used to order the collocations
+
+
+
+
+```{r}
+# Collocation - A sequence of terms which follow each other 
+collocated_terms <- keywords_collocation(x = final_annotate_text,   
+                              term = "token", 
+                              group = c("doc_id", "paragraph_id", "sentence_id"),
+                              ngram_max = 3)  
+str(collocated_terms)
+collocated_terms %>% head(30)
+
+```
+
+# Description
+
+# Cooccurence data.frame indicates how many times each term co-occurs with another term.
+#There are 3 types of cooccurrences:
+# 1. Looking at which words are located in the same document/sentence/paragraph.
+# 2. Looking at which words are followed by another word
+# 3. Looking at which words are in the neighbourhood of the word as in follows the word within skipgram number of words
+
+#The output of the function gives a cooccurrence data.frame which contains the fields term1, term2 and cooc where cooc indicates how many times term1 and term2 co-occurred. This dataset can be constructed 
+# 1.based upon a data frame where you look within a group (column of the data.frame) if 2 terms occurred in that group.
+# 2.based upon a vector of words in which case we look how many times each word is followed by another word.
+# 3.based upon a vector of words in which case we look how many times each word is followed by another word or is followed by another word if we skip a number of words in between.
+# You can also aggregate cooccurrences if you decide to do any of these 3 by a certain group and next want to have an overall aggregate.
+
+```{r}
+# Cooccurence - How many times each term co-occurs with another term
+
+#xpos = table(final_annotate_text$xpos)  # Language-specific part-of-speech tag; underscore if not available
+#upos = table(final_annotate_text$upos)  # Universal part-of-speech tag
+
+# Sentence Co-occurrences for nouns or verbs only. Looking at which words are located in the same document/sentence/paragraph.
+
+x = subset(final_annotate_text, upos %in% c("NOUN","VERB"))
+#str(x)
+#head(x)
+
+cooccured_terms_doc <- cooccurrence(x, term="lemma",group = c("doc_id","paragraph_id","sentence_id"))
+str(cooccured_terms_doc)
+head(cooccured_terms_doc)
+
+# Looking at which words are followed by another word. General (non-sentence based) Co-occurrences
+
+cooccured_terms_gen <- cooccurrence(x = final_annotate_text$lemma, 
+                      relevant = final_annotate_text$upos %in% c("NOUN", "VERB")) 
+str(cooccured_terms_gen)
+head(cooccured_terms_gen)
+
+# Looking at which words are in the neighbourhood of the word as in follows the word within skipgram number of words. Skipgram based Co-occurrences: How frequent do words follow one another within skipgram number of words
+
+cooccured_terms_skipgm <- cooccurrence(x = final_annotate_text$lemma, 
+                      relevant = final_annotate_text$upos %in% c("NOUN", "VERB"), 
+                    skipgram = 3)  
+
+str(cooccured_terms_skipgm)
+head(cooccured_terms_skipgm)  # sorted in descending order
+
+```
+
