@@ -1,0 +1,176 @@
+---
+title: "Assignment2_ShinyApp"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+if (!require(shiny)) {install.packages('shiny')}
+#rm(list=ls())    # clear workspace
+```
+
+
+```{r}
+
+# Shiny UI
+
+ui <- shinyUI(
+fluidPage(
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("file1", "Choose Text File",
+        accept = c(
+          "text/csv",
+          "text/comma-separated-values,text/plain",
+          ".csv")
+        ),
+      #tags$hr(),
+      checkboxGroupInput("upos", "Universal part-of-speech tags:",
+                         choices = c("Adjective"="ADJ", "Noun"="NOUN", "Proper Noun"="PROPN","Adverb"="ADV","Verb"="VERB"),
+                         selected = c("ADJ","NOUN","PROPN")),
+      #checkboxInput("header", "Header", TRUE)
+      # Button
+      downloadButton("downloadData", "Download")
+    ),
+    mainPanel(
+      tabsetPanel(type = "tabs", # builds tab struc
+              
+                  tabPanel("Overview",   # leftmost tab
+                             
+                             h4(p("Features")),
+                             
+                             p("1. This app demonstrates different techniques for natural language processing. Following are the                                 functionalities build in this application", align="justify"),
+                             
+                             p("2. This app should be able to read any text file using standard upload functionality.",                                          align="justify"),
+                             
+                             p("3. English language model should be included within the app.", align="justify"),
+                             
+                             p("4. User should be able to select list of Universal part-of-speech tags (upos) using check box for                                plotting co-occurrences.", align="justify"),
+                             
+                             p("5. Based on upos selection, filter annotated document and build co-occurrences plot.",                                           align="justify"),
+                             
+                             p("6. App should have at least 4 output tabs.", align="justify"),
+                           
+                             br(),
+                             
+                             h4('How to use this App'),
+                             
+                             p('1. To use this app, click on', span(strong("Choose Text File"))),
+                             p('2. Browse the text file you need of your choice'),
+                             p('3. Make selection of Universal part-of-speech tags (upos) using check box')),
+                           
+                  #Annotated Data output Panel
+                  tabPanel("Annotated Data",tableOutput('table')),
+                  
+                  #World Cloud output Panel
+                  tabPanel("WordCloud", plotOutput('plot1')),
+                  
+                  #World Network output Panel
+                  tabPanel("WordNetwork", plotOutput('plot2'))
+                  
+                           
+                          
+
+        #)# end of tabPanel
+      )# end of tabsetPanel
+    )# end of main panel
+  )# end of sidebarLayout
+)# end of fliudPage
+)# end of shinyUI
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r, eval=F, echo=TRUE}
+server <-shinyServer(function(input, output) {
+  
+  Dataset <- reactive({
+    
+    if (is.null(input$file1)) { return(NULL) } else
+      {
+        
+      Data <- readLines(input$file1$datapath)
+      
+      return(Data)
+    }  # else stmt ends
+    
+  })  # reactive stmt ends
+
+#text <- reactive( updated_text(Dataset(),punct = TRUE,alphanum = TRUE,blank = TRUE, cntrl = TRUE)%>%                           annotated_text(.,model = "english")
+
+    output$table <-renderTable({
+      
+      text_anno = updated_text(Dataset(),punct = TRUE,alphanum = TRUE,blank = TRUE, cntrl = TRUE)%>%                         annotated_text(.,model = "english")%>% head(.,100)
+      return(text_anno)
+      }) #end of render table
+    
+    # Downloadable csv of selected dataset ----
+    output$downloadData <- downloadHandler(
+    filename = function() {"name.csv"},
+      #paste("data-", Sys.Date(), ".csv", sep="")
+    #},
+    content = function(file) {
+      text_anno = updated_text(Dataset(),punct = TRUE,alphanum = TRUE,blank = TRUE, cntrl = TRUE)%>%                                   annotated_text(.,model = "english")%>% head(.,100)
+      write.csv(text_anno, file)
+    }
+  ) # end of download handler
+   
+  #WordCloud Plot
+    
+   output$plot1 <- renderPlot({   
+   text_anno = updated_text(Dataset(),punct = TRUE,alphanum = TRUE,blank = TRUE, cntrl = TRUE)%>%                                   annotated_text(.,model = "english")%>% head(.,100)     
+   
+   worldoutput = annotated_text_wc (text_anno,noun = TRUE, verb = TRUE) 
+   return(worldoutput)
+   })
+   
+   #WordNetwork Plot
+    
+   output$plot2 <- renderPlot({   
+   cooccured_terms_doc <- cooccurrence(x = subset(final_annotate_text, upos %in% c("NOUN", "VERB")),term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+  
+    wordnetwork <- head(cooccured_terms_doc, 50)
+    wordnetwork <- igraph::graph_from_data_frame(wordnetwork) # needs edgelist in first 2 colms.
+
+    ggraph(wordnetwork, layout = "fr") +  
+
+    geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "orange") +  
+    geom_node_text(aes(label = name), col = "darkgreen", size = 4) +
+  
+    theme_graph(base_family = "Arial Narrow") +  
+    theme(legend.position = "none") +
+  
+    labs(title = "Words are located in the same document/sentence/paragraph", subtitle = "Sentence Co-occurrences for NOUN and       VERB")
+
+   return(wordnetwork)
+   })
+    
+  })# end of shinyServer
+#})  
+# server.R file endd
+```
+
+# Now call shinyApp function
+
+
+```{r}
+# Now call shinyApp function
+shinyApp(ui = ui, server = server)
+```
+
